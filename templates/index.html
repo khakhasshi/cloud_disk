@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件共享 - CRT终端</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier Prime', 'Courier New', monospace;
+            background: #000;
+            color: #00ff00;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
+        }
+        
+        /* CRT扫描线效果 - 轻量化版本 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 255, 0, 0.02) 2px,
+                rgba(0, 255, 0, 0.02) 4px
+            );
+            pointer-events: none;
+            z-index: 1000;
+            /* 移除动画以降低能耗 */
+        }
+        
+        /* CRT屏幕效果 - 简化版本 */
+        .crt-screen {
+            position: relative;
+            background: #001100;
+            border: 20px solid #333;
+            border-radius: 20px;
+            box-shadow: 
+                inset 0 0 50px rgba(0, 255, 0, 0.1),
+                0 0 30px rgba(0, 255, 0, 0.2);
+            overflow: hidden;
+            /* 移除复杂的动画效果 */
+        }
+        
+        /* 简化的闪烁效果 - 降低频率 */
+        @keyframes crt-flicker {
+            0%, 98% { opacity: 1; }
+            99% { opacity: 0.95; }
+            100% { opacity: 1; }
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(0, 20, 0, 0.9);
+            border: 2px solid #00ff00;
+            box-shadow: 
+                0 0 20px rgba(0, 255, 0, 0.3),
+                inset 0 0 20px rgba(0, 255, 0, 0.1);
+            position: relative;
+            /* 移除动画以降低能耗 */
+        }
+        
+        .header {
+            background: rgba(0, 40, 0, 0.8);
+            color: #00ff00;
+            padding: 30px;
+            text-align: center;
+            border-bottom: 2px solid #00ff00;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 49%, rgba(0, 255, 0, 0.03) 50%, transparent 51%);
+            pointer-events: none;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+            text-shadow: 
+                0 0 10px #00ff00, 
+                0 0 20px #00ff00;
+            letter-spacing: 2px;
+            /* 保留简单的发光效果，移除复杂动画 */
+        }
+        
+        .server-info {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            box-shadow: inset 0 0 10px rgba(0, 255, 0, 0.2);
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .upload-section {
+            background: rgba(0, 255, 0, 0.05);
+            border: 2px dashed #00ff00;
+            padding: 25px;
+            margin-bottom: 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 0 10px rgba(0, 255, 0, 0.1);
+        }
+        
+        .upload-section:hover {
+            background: rgba(0, 255, 0, 0.1);
+            box-shadow: 
+                inset 0 0 20px rgba(0, 255, 0, 0.2),
+                0 0 20px rgba(0, 255, 0, 0.3);
+        }
+        
+        .upload-section.drag-over {
+            background: rgba(0, 255, 0, 0.15);
+            border-color: #00ffff;
+            box-shadow: 
+                inset 0 0 30px rgba(0, 255, 255, 0.3),
+                0 0 30px rgba(0, 255, 255, 0.5);
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+        
+        .file-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .file-input-button {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+            padding: 12px 30px;
+            border: 2px solid #00ff00;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            display: inline-block;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        .file-input-button:hover {
+            background: rgba(0, 255, 0, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+            text-shadow: 0 0 5px #00ff00;
+        }
+        
+        .upload-button {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+            padding: 12px 25px;
+            border: 2px solid #00ff00;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: inherit;
+            margin-left: 10px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        .upload-button:hover {
+            background: rgba(0, 255, 0, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+            text-shadow: 0 0 5px #00ff00;
+        }
+        
+        .upload-button:disabled {
+            background: rgba(100, 100, 100, 0.2);
+            color: #666;
+            border-color: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+            text-shadow: none;
+        }
+        
+        /* 进度条样式 */
+        .progress-container {
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #00ff00;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #00aa00);
+            width: 0%;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+            position: relative;
+        }
+        
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.3) 50%,
+                transparent 100%
+            );
+            animation: progress-shine 2s linear infinite;
+        }
+        
+        @keyframes progress-shine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #00ff00;
+        }
+        
+        .files-section h2 {
+            color: #00ff00;
+            margin-bottom: 20px;
+            font-weight: 700;
+            font-size: 1.8em;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #00ff00;
+        }
+        
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        
+        .file-card {
+            background: rgba(0, 40, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 
+                0 0 10px rgba(0, 255, 0, 0.3),
+                inset 0 0 10px rgba(0, 255, 0, 0.1);
+            position: relative;
+        }
+        
+        .file-card:hover {
+            background: rgba(0, 60, 0, 0.9);
+            box-shadow: 
+                0 0 20px rgba(0, 255, 0, 0.5),
+                inset 0 0 20px rgba(0, 255, 0, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .file-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, transparent 49%, rgba(0, 255, 0, 0.02) 50%, transparent 51%);
+            pointer-events: none;
+        }
+        
+        .file-preview {
+            width: 100%;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #00ff00;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .file-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: cover;
+            filter: sepia(100%) hue-rotate(80deg) saturate(150%);
+        }
+        
+        .file-icon {
+            font-size: 48px;
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+        }
+        
+        .file-name {
+            font-weight: 700;
+            color: #00ff00;
+            margin-bottom: 10px;
+            word-break: break-word;
+            font-size: 1.1em;
+            text-shadow: 0 0 5px #00ff00;
+        }
+        
+        .file-info {
+            color: #00aa00;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            display: inline-block;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .btn-download {
+            background: rgba(0, 200, 255, 0.2);
+            color: #00ccff;
+            border-color: #00ccff;
+            box-shadow: 0 0 5px rgba(0, 200, 255, 0.3);
+        }
+        
+        .btn-download:hover {
+            background: rgba(0, 200, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0, 200, 255, 0.6);
+            text-shadow: 0 0 5px #00ccff;
+        }
+        
+        .btn-delete {
+            background: rgba(255, 50, 50, 0.2);
+            color: #ff3333;
+            border-color: #ff3333;
+            box-shadow: 0 0 5px rgba(255, 50, 50, 0.3);
+        }
+        
+        .btn-delete:hover {
+            background: rgba(255, 50, 50, 0.3);
+            box-shadow: 0 0 15px rgba(255, 50, 50, 0.6);
+            text-shadow: 0 0 5px #ff3333;
+        }
+        
+        .btn-download-all {
+            background: rgba(255, 255, 0, 0.2);
+            color: #ffff00;
+            border: 2px solid #ffff00;
+            padding: 15px 30px;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: inherit;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.3);
+        }
+        
+        .btn-download-all:hover {
+            background: rgba(255, 255, 0, 0.3);
+            box-shadow: 0 0 20px rgba(255, 255, 0, 0.6);
+            text-shadow: 0 0 5px #ffff00;
+        }
+        
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        
+        .flash {
+            padding: 15px;
+            border: 1px solid;
+            margin-bottom: 10px;
+            font-weight: 500;
+            animation: flash-blink 0.5s ease-in-out;
+        }
+        
+        @keyframes flash-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .flash.success {
+            background: rgba(0, 255, 0, 0.1);
+            color: #00ff00;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        .flash.error {
+            background: rgba(255, 0, 0, 0.1);
+            color: #ff5555;
+            border-color: #ff5555;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+        }
+        
+        .no-files {
+            text-align: center;
+            color: #00aa00;
+            font-style: italic;
+            padding: 40px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px dashed #00aa00;
+        }
+        
+        .file-count {
+            text-align: center;
+            color: #00aa00;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* 文件管理工具栏 */
+        .file-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .search-box input {
+            min-width: 200px;
+        }
+        
+        .search-box input::placeholder {
+            color: #00aa00;
+        }
+        
+        .view-options {
+            display: flex;
+            gap: 5px;
+        }
+
+        /* 搜索输入框样式 */
+        .search-input {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            padding: 8px 12px;
+            font-family: inherit;
+            text-transform: uppercase;
+            min-width: 200px;
+            border-radius: 3px;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+            background: rgba(0, 255, 0, 0.05);
+        }
+
+        .search-input::placeholder {
+            color: #00aa00;
+        }
+
+        /* 排序选择器样式 */
+        .sort-select {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            padding: 8px 12px;
+            font-family: inherit;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .sort-select:focus {
+            outline: none;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+
+        .sort-select option {
+            background: #001100;
+            color: #00ff00;
+        }
+
+        /* 视图切换按钮样式 */
+        .view-btn {
+            background: rgba(0, 255, 0, 0.1);
+            color: #00aa00;
+            border: 1px solid #00aa00;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-family: inherit;
+            border-radius: 3px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .view-btn:hover, .view-btn.active {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+
+        /* 工具栏布局 */
+        .toolbar-left {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex: 1;
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        
+        .btn-view {
+            background: rgba(0, 255, 0, 0.1);
+            color: #00aa00;
+            border: 1px solid #00aa00;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-view:hover, .btn-view.active {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        /* 列表视图样式 */
+        .files-list {
+            display: none;
+        }
+        
+        .files-list.active {
+            display: block;
+        }
+        
+        .file-list-item {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 40, 0, 0.6);
+            border: 1px solid #00aa00;
+            margin-bottom: 10px;
+            padding: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .file-list-item:hover {
+            background: rgba(0, 60, 0, 0.8);
+            border-color: #00ff00;
+        }
+        
+        .file-list-icon {
+            font-size: 24px;
+            margin-right: 15px;
+            min-width: 40px;
+        }
+        
+        .file-list-info {
+            flex: 1;
+            margin-right: 15px;
+        }
+        
+        .file-list-name {
+            font-weight: 600;
+            color: #00ff00;
+            margin-bottom: 5px;
+        }
+        
+        .file-list-details {
+            color: #00aa00;
+            font-size: 0.9em;
+        }
+        
+        .file-list-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .selected-file {
+            margin-top: 10px;
+            color: #00aa00;
+            font-size: 0.9em;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border: 1px solid #00aa00;
+            white-space: pre-line;
+        }
+        
+        /* 终端风格的加载动画 - 简化版本 */
+        .loading {
+            display: inline-block;
+            animation: terminal-blink 2s infinite;
+        }
+        
+        @keyframes terminal-blink {
+            0%, 80% { opacity: 1; }
+            81%, 100% { opacity: 0.3; }
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .files-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .file-actions {
+                flex-direction: column;
+            }
+        }
+        
+        /* 下载进度条 */
+        .download-progress {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff00;
+            padding: 30px;
+            z-index: 10000;
+            display: none;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
+        }
+        
+        .download-progress h3 {
+            color: #00ff00;
+            margin-bottom: 20px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        
+        /* 拖拽增强效果 */
+        .drag-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 255, 255, 0.2);
+            border: 3px dashed #00ffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ffff;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+            z-index: 1000;
+            animation: pulse-border 1s ease-in-out infinite alternate;
+        }
+        
+        @keyframes pulse-border {
+            from { border-width: 3px; }
+            to { border-width: 6px; }
+        }
+        
+        /* 按钮尺寸变体 */
+        .btn-tiny {
+            padding: 4px 8px;
+            font-size: 0.7em;
+            min-width: auto;
+        }
+        
+        /* 响应式优化 */
+        @media (max-width: 768px) {
+            .file-toolbar {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .toolbar-left, .toolbar-right {
+                width: 100%;
+            }
+            
+            .search-input {
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="crt-screen">
+        <div class="container">
+            <div class="header">
+                <h1>�️ FILE_SHARE.EXE</h1>
+                <p>[ RETRO TERMINAL FILE SHARING SYSTEM ]</p>
+                <div class="server-info">
+                    <p>🌐 SERVER_ADDR: http://{{ server_ip }}:8080</p>
+                    <p>� NETWORK STATUS: [<span class="loading">ONLINE</span>]</p>
+                    <p>🔗 CONNECT OTHER DEVICES TO THIS ADDRESS</p>
+                </div>
+            </div>
+            
+            <div class="content">
+                <!-- 闪现消息 -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-messages">
+                            {% for category, message in messages %}
+                                <div class="flash {{ category }}">[{{ category.upper() }}] {{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                
+                <!-- 上传区域 -->
+                <div class="upload-section" id="uploadSection">
+                    <h3>📤 UPLOAD_MODULE</h3>
+                    <p style="margin-bottom: 20px; color: #00aa00;">DRAG FILES OR SELECT MULTIPLE FILES FOR UPLOAD</p>
+                    <form method="post" action="/upload" enctype="multipart/form-data" id="uploadForm">
+                        <div class="file-input-wrapper">
+                            <input type="file" name="file" class="file-input" id="fileInput" multiple required>
+                            <label for="fileInput" class="file-input-button">SELECT_FILES</label>
+                        </div>
+                        <button type="submit" class="upload-button" id="uploadButton" disabled>EXECUTE_UPLOAD</button>
+                    </form>
+                    <div class="selected-file" id="selectedFile"></div>
+                    
+                    <!-- 上传进度条 -->
+                    <div class="progress-container" id="uploadProgress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="uploadProgressFill"></div>
+                        </div>
+                        <div class="progress-text" id="uploadProgressText">UPLOADING... 0%</div>
+                    </div>
+                </div>
+                
+                <!-- 下载进度条覆盖层 -->
+                <div class="download-progress" id="downloadProgress">
+                    <h3>DOWNLOADING...</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="downloadProgressFill"></div>
+                    </div>
+                    <div class="progress-text" id="downloadProgressText">PREPARING DOWNLOAD... 0%</div>
+                </div>
+                
+                <!-- 文件列表 -->
+                <div class="files-section">
+                    <h2>� FILE_SYSTEM</h2>
+                    
+                    {% if files %}
+                        <div class="file-count">
+                            [TOTAL_FILES: {{ files|length }}]
+                        </div>
+                        
+                        <button onclick="downloadAllFiles()" class="btn-download-all">
+                            📦 DOWNLOAD_ALL.ZIP
+                        </button>
+                        
+                        <!-- 文件管理工具栏 -->
+                        <div class="file-toolbar">
+                            <div class="toolbar-left">
+                                <input type="text" id="fileSearch" placeholder="🔍 SEARCH_FILES..." class="search-input">
+                                <select id="sortFiles" class="sort-select">
+                                    <option value="name">SORT_BY_NAME</option>
+                                    <option value="size">SORT_BY_SIZE</option>
+                                    <option value="date">SORT_BY_DATE</option>
+                                    <option value="type">SORT_BY_TYPE</option>
+                                </select>
+                            </div>
+                            <div class="toolbar-right">
+                                <button id="viewGrid" class="view-btn active">⚏ GRID</button>
+                                <button id="viewList" class="view-btn">☰ LIST</button>
+                            </div>
+                        </div>
+                        
+                        <div class="files-grid" id="gridView">
+                            {% for file in files %}
+                            <div class="file-card" data-name="{{ file.name.lower() }}" data-size="{{ file.size_bytes }}" data-date="{{ file.modified }}" data-type="{{ file.name.split('.')[-1].lower() if '.' in file.name else 'unknown' }}">
+                                <div class="file-preview">
+                                    {% set file_ext = file.name.split('.')[-1].lower() if '.' in file.name else '' %}
+                                    {% if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'] %}
+                                        <img src="/preview/{{ file.name }}" alt="{{ file.name }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <div class="file-icon" style="display: none;">🖼️</div>
+                                    {% elif file_ext in ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'] %}
+                                        <div class="file-icon">🎬</div>
+                                    {% elif file_ext in ['mp3', 'wav', 'flac', 'aac', 'ogg'] %}
+                                        <div class="file-icon">🎵</div>
+                                    {% elif file_ext in ['pdf'] %}
+                                        <div class="file-icon">📄</div>
+                                    {% elif file_ext in ['doc', 'docx', 'txt', 'rtf'] %}
+                                        <div class="file-icon">📝</div>
+                                    {% elif file_ext in ['xls', 'xlsx', 'csv'] %}
+                                        <div class="file-icon">📊</div>
+                                    {% elif file_ext in ['zip', 'rar', '7z', 'tar', 'gz'] %}
+                                        <div class="file-icon">📦</div>
+                                    {% elif file_ext in ['exe', 'msi', 'dmg', 'deb', 'rpm'] %}
+                                        <div class="file-icon">⚙️</div>
+                                    {% else %}
+                                        <div class="file-icon">📁</div>
+                                    {% endif %}
+                                </div>
+                                <div class="file-name">{{ file.name }}</div>
+                                <div class="file-info">
+                                    SIZE: {{ file.size }}<br>
+                                    MODIFIED: {{ file.modified }}
+                                </div>
+                                <div class="file-actions">
+                                    <a href="#" onclick="downloadFile('{{ file.name }}'); return false;" class="btn btn-download">
+                                        ⬇️ DOWNLOAD
+                                    </a>
+                                    <a href="/delete/{{ file.name }}" 
+                                       class="btn btn-delete" 
+                                       onclick="return confirm('DELETE FILE: {{ file.name }}?')">
+                                       🗑️ DELETE
+                                    </a>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- 列表视图 -->
+                        <div class="files-list" id="listView" style="display: none;">
+                            {% for file in files %}
+                            <div class="file-list-item" data-name="{{ file.name.lower() }}" data-size="{{ file.size_bytes }}" data-date="{{ file.modified }}" data-type="{{ file.name.split('.')[-1].lower() if '.' in file.name else 'unknown' }}">
+                                <div class="file-list-icon">
+                                    {% set file_ext = file.name.split('.')[-1].lower() if '.' in file.name else '' %}
+                                    {% if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'] %}
+                                        🖼️
+                                    {% elif file_ext in ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'] %}
+                                        🎬
+                                    {% elif file_ext in ['mp3', 'wav', 'flac', 'aac', 'ogg'] %}
+                                        🎵
+                                    {% elif file_ext in ['pdf'] %}
+                                        📄
+                                    {% elif file_ext in ['doc', 'docx', 'txt', 'rtf'] %}
+                                        📝
+                                    {% elif file_ext in ['xls', 'xlsx', 'csv'] %}
+                                        📊
+                                    {% elif file_ext in ['zip', 'rar', '7z', 'tar', 'gz'] %}
+                                        📦
+                                    {% elif file_ext in ['exe', 'msi', 'dmg', 'deb', 'rpm'] %}
+                                        ⚙️
+                                    {% else %}
+                                        📁
+                                    {% endif %}
+                                </div>
+                                <div class="file-list-info">
+                                    <div class="file-list-name">{{ file.name }}</div>
+                                    <div class="file-list-details">{{ file.size }} • {{ file.modified }}</div>
+                                </div>
+                                <div class="file-list-actions">
+                                    <a href="#" onclick="downloadFile('{{ file.name }}'); return false;" class="btn btn-download">⬇️</a>
+                                    <a href="/delete/{{ file.name }}" class="btn btn-delete" onclick="return confirm('DELETE FILE: {{ file.name }}?')">🗑️</a>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="no-files">
+                            <p>📭 NO FILES IN SYSTEM</p>
+                            <p>UPLOAD FILES TO BEGIN SHARING</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 文件选择逻辑
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const files = e.target.files;
+            const uploadButton = document.getElementById('uploadButton');
+            const selectedFile = document.getElementById('selectedFile');
+            
+            if (files.length > 0) {
+                let fileList = '[SELECTED_FILES]\n';
+                if (files.length === 1) {
+                    fileList += `FILE: ${files[0].name}\nSIZE: ${formatFileSize(files[0].size)}`;
+                } else {
+                    let totalSize = 0;
+                    for (let i = 0; i < files.length; i++) {
+                        totalSize += files[i].size;
+                    }
+                    fileList += `COUNT: ${files.length} FILES\nTOTAL_SIZE: ${formatFileSize(totalSize)}\n\n`;
+                    Array.from(files).forEach((file, index) => {
+                        fileList += `${index + 1}. ${file.name} (${formatFileSize(file.size)})\n`;
+                    });
+                }
+                selectedFile.textContent = fileList;
+                uploadButton.disabled = false;
+            } else {
+                selectedFile.textContent = '';
+                uploadButton.disabled = true;
+            }
+        });
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+        
+        // 拖拽上传功能
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('fileInput');
+        
+        uploadSection.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadSection.classList.add('drag-over');
+        });
+        
+        uploadSection.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            uploadSection.classList.remove('drag-over');
+        });
+        
+        uploadSection.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadSection.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+        });
+        
+        // 文件上传进度
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const files = document.getElementById('fileInput').files;
+            
+            if (files.length === 0) {
+                alert('[ERROR] NO FILES SELECTED');
+                return;
+            }
+            
+            // 显示上传进度
+            document.getElementById('uploadProgress').style.display = 'block';
+            const progressFill = document.getElementById('uploadProgressFill');
+            const progressText = document.getElementById('uploadProgressText');
+            
+            // 创建XMLHttpRequest来监控上传进度
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressFill.style.width = percentComplete + '%';
+                    progressText.textContent = `UPLOADING... ${Math.round(percentComplete)}%`;
+                }
+            });
+            
+            xhr.addEventListener('loadstart', function() {
+                progressText.textContent = 'INITIALIZING UPLOAD...';
+            });
+            
+            xhr.addEventListener('load', function() {
+                if (xhr.status === 200) {
+                    progressFill.style.width = '100%';
+                    progressText.textContent = 'UPLOAD COMPLETE!';
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    progressText.textContent = 'UPLOAD FAILED!';
+                }
+            });
+            
+            xhr.addEventListener('error', function() {
+                progressText.textContent = 'UPLOAD ERROR!';
+            });
+            
+            xhr.open('POST', '/upload');
+            xhr.send(formData);
+        });
+        
+        // 单个文件下载
+        function downloadFile(filename) {
+            const downloadProgress = document.getElementById('downloadProgress');
+            const progressFill = document.getElementById('downloadProgressFill');
+            const progressText = document.getElementById('downloadProgressText');
+            
+            downloadProgress.style.display = 'block';
+            progressText.textContent = 'INITIALIZING DOWNLOAD...';
+            
+            // 模拟下载进度
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 30;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    progressText.textContent = 'DOWNLOAD COMPLETE!';
+                    
+                    // 开始实际下载
+                    setTimeout(() => {
+                        window.location.href = `/download/${filename}`;
+                        downloadProgress.style.display = 'none';
+                        progressFill.style.width = '0%';
+                    }, 500);
+                } else {
+                    progressFill.style.width = progress + '%';
+                    progressText.textContent = `DOWNLOADING... ${Math.round(progress)}%`;
+                }
+            }, 200);
+        }
+        
+        // 下载所有文件
+        function downloadAllFiles() {
+            const downloadProgress = document.getElementById('downloadProgress');
+            const progressFill = document.getElementById('downloadProgressFill');
+            const progressText = document.getElementById('downloadProgressText');
+            
+            downloadProgress.style.display = 'block';
+            progressText.textContent = 'COMPRESSING FILES...';
+            
+            // 模拟压缩和下载进度
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 20;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    progressText.textContent = 'COMPRESSION COMPLETE!';
+                    
+                    // 开始实际下载
+                    setTimeout(() => {
+                        window.location.href = '/download_all';
+                        downloadProgress.style.display = 'none';
+                        progressFill.style.width = '0%';
+                    }, 500);
+                } else {
+                    progressFill.style.width = progress + '%';
+                    if (progress < 30) {
+                        progressText.textContent = `SCANNING FILES... ${Math.round(progress)}%`;
+                    } else if (progress < 70) {
+                        progressText.textContent = `COMPRESSING... ${Math.round(progress)}%`;
+                    } else {
+                        progressText.textContent = `FINALIZING... ${Math.round(progress)}%`;
+                    }
+                }
+            }, 300);
+        }
+        
+        // 点击下载进度条外部关闭
+        document.getElementById('downloadProgress').addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+                document.getElementById('downloadProgressFill').style.width = '0%';
+            }
+        });
+        
+        // 终端风格的控制台输出
+        console.log(`
+    ╔══════════════════════════════════════════════════╗
+    ║              CRT FILE SHARING SYSTEM             ║
+    ║                   VERSION 2.1                    ║
+    ║                                                  ║
+    ║  [✓] MULTI-FILE UPLOAD ENABLED                   ║
+    ║  [✓] PROGRESS MONITORING ACTIVE                  ║
+    ║  [✓] IMAGE PREVIEW LOADED                        ║
+    ║  [✓] LIGHTWEIGHT CRT INTERFACE                   ║
+    ║  [✓] OPTIMIZED FOR LOW POWER CONSUMPTION         ║
+    ║                                                  ║
+    ║  STATUS: ONLINE AND OPERATIONAL                  ║
+    ╚══════════════════════════════════════════════════╝
+        `);
+        
+        // 简化版CRT效果 - 仅在用户交互时触发
+        function initLightweightCRTEffects() {
+            const crtScreen = document.querySelector('.crt-screen');
+            
+            // 仅在鼠标悬停时增加发光效果
+            crtScreen.addEventListener('mouseenter', function() {
+                this.style.boxShadow = `
+                    inset 0 0 60px rgba(0, 255, 0, 0.15),
+                    0 0 40px rgba(0, 255, 0, 0.3)
+                `;
+            });
+            
+            crtScreen.addEventListener('mouseleave', function() {
+                this.style.boxShadow = `
+                    inset 0 0 50px rgba(0, 255, 0, 0.1),
+                    0 0 30px rgba(0, 255, 0, 0.2)
+                `;
+            });
+        }
+        
+        // 启动轻量化CRT效果
+        document.addEventListener('DOMContentLoaded', initLightweightCRTEffects);
+        
+        // 文件管理功能
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('fileSearch');
+            const sortSelect = document.getElementById('sortFiles');
+            const viewGridBtn = document.getElementById('viewGrid');
+            const viewListBtn = document.getElementById('viewList');
+            const gridView = document.getElementById('gridView');
+            const listView = document.getElementById('listView');
+            
+            // 搜索功能
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = this.value.toLowerCase();
+                    const currentView = gridView.style.display !== 'none' ? 'grid' : 'list';
+                    const items = currentView === 'grid' ? 
+                        document.querySelectorAll('.file-card') : 
+                        document.querySelectorAll('.file-list-item');
+                    
+                    items.forEach(item => {
+                        const fileName = item.dataset.name;
+                        if (fileName.includes(searchTerm)) {
+                            item.style.display = '';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            }
+            
+            // 排序功能
+            if (sortSelect) {
+                sortSelect.addEventListener('change', function() {
+                    const sortBy = this.value;
+                    const currentView = gridView.style.display !== 'none' ? 'grid' : 'list';
+                    const container = currentView === 'grid' ? gridView : listView;
+                    const items = Array.from(container.children);
+                    
+                    items.sort((a, b) => {
+                        let aValue, bValue;
+                        switch (sortBy) {
+                            case 'name':
+                                aValue = a.dataset.name;
+                                bValue = b.dataset.name;
+                                break;
+                            case 'size':
+                                aValue = parseInt(a.dataset.size);
+                                bValue = parseInt(b.dataset.size);
+                                break;
+                            case 'date':
+                                aValue = new Date(a.dataset.date);
+                                bValue = new Date(b.dataset.date);
+                                break;
+                            case 'type':
+                                aValue = a.dataset.type;
+                                bValue = b.dataset.type;
+                                break;
+                        }
+                        
+                        if (sortBy === 'size' || sortBy === 'date') {
+                            return bValue - aValue; // 降序
+                        } else {
+                            return aValue.localeCompare(bValue); // 升序
+                        }
+                    });
+                    
+                    items.forEach(item => container.appendChild(item));
+                });
+            }
+            
+            // 视图切换
+            if (viewGridBtn && viewListBtn) {
+                viewGridBtn.addEventListener('click', function() {
+                    gridView.style.display = 'grid';
+                    listView.style.display = 'none';
+                    this.classList.add('active');
+                    viewListBtn.classList.remove('active');
+                });
+                
+                viewListBtn.addEventListener('click', function() {
+                    gridView.style.display = 'none';
+                    listView.style.display = 'block';
+                    this.classList.add('active');
+                    viewGridBtn.classList.remove('active');
+                });
+            }
+        });
+        
+        // 增强的上传体验
+        function initUploadEnhancements() {
+            const fileInput = document.getElementById('fileInput');
+            const uploadSection = document.getElementById('uploadSection');
+            
+            // 拖拽视觉反馈增强
+            let dragCounter = 0;
+            
+            uploadSection.addEventListener('dragenter', function(e) {
+                e.preventDefault();
+                dragCounter++;
+                this.classList.add('drag-over');
+                this.innerHTML += '<div class="drag-overlay">DROP FILES HERE</div>';
+            });
+            
+            uploadSection.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                dragCounter--;
+                if (dragCounter === 0) {
+                    this.classList.remove('drag-over');
+                    const overlay = this.querySelector('.drag-overlay');
+                    if (overlay) overlay.remove();
+                }
+            });
+            
+            uploadSection.addEventListener('drop', function(e) {
+                e.preventDefault();
+                dragCounter = 0;
+                this.classList.remove('drag-over');
+                const overlay = this.querySelector('.drag-overlay');
+                if (overlay) overlay.remove();
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    fileInput.dispatchEvent(new Event('change'));
+                }
+            });
+        }
+        
+        // 键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            // Ctrl+F 或 Cmd+F 聚焦搜索框
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                const searchInput = document.getElementById('fileSearch');
+                if (searchInput) {
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            }
+            
+            // ESC 清空搜索
+            if (e.key === 'Escape') {
+                const searchInput = document.getElementById('fileSearch');
+                if (searchInput && searchInput.value) {
+                    searchInput.value = '';
+                    searchInput.dispatchEvent(new Event('input'));
+                }
+            }
+        });
+        
+        // 初始化增强功能
+        document.addEventListener('DOMContentLoaded', initUploadEnhancements);
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Flask文件共享应用的依赖包
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# 生产环境WSGI服务器
+gunicorn==21.2.0
+
+# 系统监控和进程管理
+psutil==5.9.5
+
+# 日志管理
+python-systemd==235
