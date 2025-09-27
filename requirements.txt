@@ -7,6 +7,3 @@ gunicorn==21.2.0
 
 # 系统监控和进程管理
 psutil==5.9.5
-
-# 日志管理
-python-systemd==235
