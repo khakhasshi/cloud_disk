@@ -31,10 +31,18 @@ fi
 
 # 检查sudo权限
 echo -e "${YELLOW}检查sudo权限...${NC}"
-sudo -v || {
-    echo -e "${RED}需要sudo权限才能继续${NC}"
-    exit 1
-}
+# 使用无密码检查方式
+if sudo -n true 2>/dev/null; then
+    echo -e "${GREEN}sudo权限已配置为免密码${NC}"
+else
+    echo -e "${YELLOW}尝试验证sudo权限...${NC}"
+    sudo -v || {
+        echo -e "${RED}需要sudo权限才能继续${NC}"
+        echo -e "${YELLOW}提示：如果没有设置密码，请运行 'sudo passwd \$(whoami)' 设置密码${NC}"
+        echo -e "${YELLOW}或者配置免密码sudo：sudo visudo 并添加 '\$(whoami) ALL=(ALL) NOPASSWD:ALL'${NC}"
+        exit 1
+    }
+fi
 
 # 函数：打印状态信息
 print_status() {
